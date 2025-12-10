@@ -50,11 +50,11 @@ M2M_CAMPAIGN = "non_vax_groupe"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Historique des conversations par user_id (pour contexte OpenAI)
-user_conversations: dict[int, list[dict]] = defaultdict(list)
+user_conversations = defaultdict(list)
 MAX_HISTORY = 5  # Nombre de messages à garder en contexte
 
 # Rate limiting : timestamps des derniers messages par user
-user_last_messages: dict[int, list[float]] = defaultdict(list)
+user_last_messages = defaultdict(list)
 RATE_LIMIT_MESSAGES = 5  # Max messages
 RATE_LIMIT_WINDOW = 60   # Par minute
 
@@ -73,24 +73,24 @@ stats = {
 AI_SYSTEM_PROMPT = """Tu es une conseillère bienveillante pour Mad2Moi, un site de rencontres pour personnes libres et éveillées.
 
 🎯 TON RÔLE :
-- Écouter et comprendre (solitude, décalage, rejet, besoin de liens authentiques)
-- Donner des conseils concrets sur la vie sociale et amoureuse
-- Rassurer : la personne n'est pas seule, une communauté alignée existe
-- Orienter vers Mad2Moi naturellement
+• Écouter et comprendre (solitude, décalage, rejet, besoin de liens authentiques)
+• Donner des conseils concrets sur la vie sociale et amoureuse
+• Rassurer : la personne n'est pas seule, une communauté alignée existe
+• Orienter vers Mad2Moi naturellement
 
 📏 RÈGLES :
-- Ton chaleureux, humain, direct, jamais condescendant
-- JAMAIS de conseils médicaux, financiers ou juridiques
-- Pas de contenu sexuel explicite
-- Pas de promesses miracles, parle de possibilités
-- Réponses courtes : 5-10 lignes max, faciles à lire
-- Utilise des emojis avec parcimonie (1-2 max)
+• Ton chaleureux, humain, direct, jamais condescendant
+• JAMAIS de conseils médicaux, financiers ou juridiques
+• Pas de contenu sexuel explicite
+• Pas de promesses miracles, parle de possibilités
+• Réponses courtes : 5-10 lignes max, faciles à lire
+• Utilise des emojis avec parcimonie (1-2 max)
 
 🔥 CALL TO ACTION (2 réponses sur 3) :
 Termine par une invitation naturelle vers Mad2Moi, exemples :
-- "Pour passer du virtuel au réel → https://www.mad2moi.com/"
-- "Le plus simple pour rencontrer des gens alignés : https://www.mad2moi.com/"
-- "Crée ton profil sur Mad2Moi, c'est là que ça se passe : https://www.mad2moi.com/"
+• "Pour passer du virtuel au réel → https://www.mad2moi.com/"
+• "Le plus simple pour rencontrer des gens alignés : https://www.mad2moi.com/"
+• "Crée ton profil sur Mad2Moi, c'est là que ça se passe : https://www.mad2moi.com/"
 
 ⚠️ Si la personne pose une question hors-sujet (météo, recette, etc.), réponds brièvement puis ramène vers le sujet principal : les rencontres et Mad2Moi."""
 
@@ -111,9 +111,9 @@ Présente-toi quand tu veux : prénom, région, ce que tu cherches ✨"""
 WELCOME_DM = """👋 Salut et bienvenue !
 
 Je suis l'assistant Mad2Moi. Ici, tu peux :
-- Me poser des questions sur les rencontres
-- Découvrir la communauté Mad2Moi
-- Obtenir des conseils personnalisés
+• Me poser des questions sur les rencontres
+• Découvrir la communauté Mad2Moi
+• Obtenir des conseils personnalisés
 
 🔥 Pour t'inscrire directement → bouton ci-dessous
 
@@ -176,7 +176,7 @@ KEYWORDS_RENCONTRE = [
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def make_m2m_url(step: str = "") -> str:
+def make_m2m_url(step=""):
     """Génère URL Mad2Moi avec UTM tracking."""
     url = f"{M2M_BASE_URL}?utm_source=telegram&utm_medium=bot&utm_campaign={M2M_CAMPAIGN}"
     if step:
@@ -184,7 +184,7 @@ def make_m2m_url(step: str = "") -> str:
     return url
 
 
-def m2m_keyboard(step: str) -> InlineKeyboardMarkup:
+def m2m_keyboard(step):
     """Clavier inline avec boutons Mad2Moi + Facebook."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("➡️ Rejoindre Mad2Moi", url=make_m2m_url(step))],
@@ -192,7 +192,7 @@ def m2m_keyboard(step: str) -> InlineKeyboardMarkup:
     ])
 
 
-def menu_keyboard() -> InlineKeyboardMarkup:
+def menu_keyboard():
     """Menu principal en DM."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("💘 Je cherche des rencontres", callback_data="menu_rencontres")],
@@ -201,7 +201,7 @@ def menu_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def is_rate_limited(user_id: int) -> bool:
+def is_rate_limited(user_id):
     """Vérifie si l'utilisateur dépasse le rate limit."""
     now = time.time()
     # Nettoyer les anciens timestamps
@@ -217,7 +217,7 @@ def is_rate_limited(user_id: int) -> bool:
     return False
 
 
-def send_typing(context: CallbackContext, chat_id: int) -> None:
+def send_typing(context, chat_id):
     """Envoie l'indicateur 'en train d'écrire...'"""
     try:
         context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
@@ -228,7 +228,7 @@ def send_typing(context: CallbackContext, chat_id: int) -> None:
 def log_handler(func):
     """Décorateur pour logger les handlers automatiquement."""
     @wraps(func)
-    def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
+    def wrapper(update, context, *args, **kwargs):
         user = update.effective_user
         chat = update.effective_chat
         handler_name = func.__name__
@@ -247,7 +247,7 @@ def log_handler(func):
 
 
 @log_handler
-def welcome_new_members(update: Update, context: CallbackContext) -> None:
+def welcome_new_members(update, context):
     """Message PUBLIC quand quelqu'un rejoint le groupe."""
     message = update.message
     chat = message.chat
@@ -270,7 +270,7 @@ def welcome_new_members(update: Update, context: CallbackContext) -> None:
             logger.warning(f"Erreur welcome public: {e}")
 
 
-def schedule_followups(context: CallbackContext, user_id: int) -> None:
+def schedule_followups(context, user_id):
     """Programme les 3 relances automatiques."""
     delays = [
         (24 * 60 * 60, 0),      # 24h
@@ -289,7 +289,7 @@ def schedule_followups(context: CallbackContext, user_id: int) -> None:
             logger.warning(f"Erreur programmation followup {msg_index}: {e}")
 
 
-def send_followup(context: CallbackContext, msg_index: int) -> None:
+def send_followup(context, msg_index):
     """Envoie une relance programmée."""
     user_id = context.job.context
     keyboard = m2m_keyboard(f"followup_{msg_index}")
@@ -305,7 +305,7 @@ def send_followup(context: CallbackContext, msg_index: int) -> None:
 
 
 @log_handler
-def cmd_start(update: Update, context: CallbackContext) -> None:
+def cmd_start(update, context):
     """/start : accueil en privé ou redirection depuis groupe."""
     chat = update.effective_chat
     user = update.effective_user
@@ -346,7 +346,7 @@ def cmd_start(update: Update, context: CallbackContext) -> None:
 
 
 @log_handler
-def cmd_help(update: Update, context: CallbackContext) -> None:
+def cmd_help(update, context):
     """/help : aide rapide."""
     chat = update.effective_chat
     help_text = """🤖 **Commandes disponibles**
@@ -371,7 +371,7 @@ Tu peux aussi m'écrire librement, je te réponds avec l'IA 💬"""
 
 
 @log_handler
-def cmd_inscription(update: Update, context: CallbackContext) -> None:
+def cmd_inscription(update, context):
     """/inscription : lien direct."""
     chat = update.effective_chat
     stats["button_clicks"]["cmd_inscription"] += 1
@@ -394,7 +394,7 @@ C'est gratuit, rapide et sécurisé ✅"""
 
 
 @log_handler
-def cmd_about(update: Update, context: CallbackContext) -> None:
+def cmd_about(update, context):
     """/about : informations sur Mad2Moi."""
     chat = update.effective_chat
     try:
@@ -409,7 +409,7 @@ def cmd_about(update: Update, context: CallbackContext) -> None:
 
 
 @log_handler
-def cmd_reset(update: Update, context: CallbackContext) -> None:
+def cmd_reset(update, context):
     """/reset : réinitialise la conversation."""
     user = update.effective_user
     chat = update.effective_chat
@@ -427,7 +427,7 @@ def cmd_reset(update: Update, context: CallbackContext) -> None:
 
 
 @log_handler
-def menu_callback(update: Update, context: CallbackContext) -> None:
+def menu_callback(update, context):
     """Gestion des boutons du menu."""
     query = update.callback_query
     data = query.data
@@ -465,7 +465,7 @@ def menu_callback(update: Update, context: CallbackContext) -> None:
 
 
 @log_handler
-def keyword_auto_reply(update: Update, context: CallbackContext) -> None:
+def keyword_auto_reply(update, context):
     """Auto-réponse dans les GROUPES sur mots-clés."""
     message = update.message
     user = message.from_user
@@ -488,7 +488,7 @@ def keyword_auto_reply(update: Update, context: CallbackContext) -> None:
 
 
 @log_handler
-def handle_media(update: Update, context: CallbackContext) -> None:
+def handle_media(update, context):
     """Gestion des médias (photos, vocaux, etc.) en privé."""
     chat = update.effective_chat
 
@@ -505,7 +505,7 @@ def handle_media(update: Update, context: CallbackContext) -> None:
 
 
 @log_handler
-def private_ai_chat(update: Update, context: CallbackContext) -> None:
+def private_ai_chat(update, context):
     """Chat IA en privé avec historique de conversation."""
     message = update.message
     chat = message.chat
@@ -559,7 +559,7 @@ def private_ai_chat(update: Update, context: CallbackContext) -> None:
             messages=messages,
             temperature=0.7,
             max_tokens=500,
-            presence_penalty=0.3,  # Encourage la variété
+            presence_penalty=0.3,
             frequency_penalty=0.3,
         )
         answer = completion.choices[0].message["content"].strip()
@@ -597,13 +597,14 @@ def private_ai_chat(update: Update, context: CallbackContext) -> None:
 
 
 @log_handler
-def cmd_stats(update: Update, context: CallbackContext) -> None:
+def cmd_stats(update, context):
     """/stats : stats internes (admin only)."""
     user = update.effective_user
     chat = update.effective_chat
 
     # Liste des admin IDs (à configurer)
-    ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x]
+    admin_ids_str = os.environ.get("ADMIN_IDS", "")
+    ADMIN_IDS = [int(x) for x in admin_ids_str.split(",") if x.strip()]
 
     if user.id not in ADMIN_IDS:
         return
@@ -633,7 +634,7 @@ def cmd_stats(update: Update, context: CallbackContext) -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def main() -> None:
+def main():
     updater = Updater(TELEGRAM_TOKEN, use_context=True)
     dp = updater.dispatcher
 
@@ -673,12 +674,12 @@ def main() -> None:
         private_ai_chat
     ))
 
-    logger.info("═" * 50)
+    logger.info("=" * 50)
     logger.info("🚀 Mad2Moi Bot démarré")
     logger.info(f"   OpenAI: {'✅' if OPENAI_API_KEY else '❌'}")
     logger.info(f"   Rate limit: {RATE_LIMIT_MESSAGES} msg/{RATE_LIMIT_WINDOW}s")
     logger.info(f"   Historique IA: {MAX_HISTORY} messages")
-    logger.info("═" * 50)
+    logger.info("=" * 50)
 
     updater.start_polling()
     updater.idle()
@@ -686,10 +687,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-```
-
----
-
-## Variables Railway à ajouter (optionnel)
-```
-ADMIN_IDS=123456789,987654321
