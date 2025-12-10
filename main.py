@@ -73,6 +73,8 @@ WELCOME_PUBLIC = (
     "qui veulent rencontrer des gens libres, éveillés et non-injectés.\n\n"
     "🔥 Pour faire de vraies rencontres, la plateforme officielle :\n"
     "👉 Mad2Moi (bouton ci-dessous)\n\n"
+    "📩 Pour recevoir un message privé avec tous les liens utiles, "
+    "clique sur le bot @mad2moi_helper_bot et appuie sur /start.\n\n"
     "Présente-toi quand tu veux : prénom, région, ce que tu cherches.\n"
     "Encore bienvenue ✨ Tu es chez toi ici."
 )
@@ -90,11 +92,11 @@ WELCOME_DM = (
 
 HELP_TEXT = (
     "👋 Je suis le bot Mad2Moi.\n\n"
-    "▶ Quand tu rejoins le groupe, je t’envoie :\n"
-    " • un message d’accueil dans le groupe\n"
-    " • un message privé avec le lien vers Mad2Moi\n\n"
-    "Tu peux aussi utiliser le menu ci-dessous pour me dire ce que tu cherches.\n"
-    "🔥 Pour découvrir la plateforme : clique sur le bouton."
+    "▶ Quand tu rejoins le groupe, tu peux me lancer en privé avec /start :\n"
+    " • je t’explique comment fonctionne Mad2Moi\n"
+    " • je t’envoie les bons liens\n"
+    " • je te propose un petit menu (rencontres / amitié / découverte)\n\n"
+    "🔥 Pour découvrir la plateforme : clique sur le bouton ci-dessous."
 )
 
 FOLLOWUP_TEXT = (
@@ -121,19 +123,17 @@ KEYWORDS_RENCONTRE = [
 
 
 def welcome_new_members(update: Update, context: CallbackContext) -> None:
-    """Appelé automatiquement quand quelqu’un rejoint le groupe."""
+    """Appelé automatiquement quand quelqu’un rejoint le groupe → message PUBLIC uniquement."""
     message = update.message
     chat = message.chat
 
     keyboard_public = m2m_keyboard("welcome_public")
-    keyboard_dm = m2m_keyboard("welcome_dm")
 
     for new_member in message.new_chat_members:
-        # On ne réagit pas si c’est un bot
+        # On ignore les bots
         if new_member.is_bot:
             continue
 
-        # 1) message public dans le groupe
         try:
             context.bot.send_message(
                 chat_id=chat.id,
@@ -143,58 +143,9 @@ def welcome_new_members(update: Update, context: CallbackContext) -> None:
         except Exception as e:
             logging.warning(f"Erreur envoi message groupe : {e}")
 
-        # 2) message privé (DM)
-        try:
-            context.bot.send_message(
-                chat_id=new_member.id,
-                text=WELCOME_DM,
-                reply_markup=keyboard_dm,
-            )
-
-            # 3) menu interactif en DM
-            menu_keyboard = InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "💘 Je cherche des rencontres",
-                            callback_data="menu_rencontres",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🤝 Je veux lier amitié",
-                            callback_data="menu_amitie",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "👀 Je découvre le groupe",
-                            callback_data="menu_decouverte",
-                        )
-                    ],
-                ]
-            )
-            context.bot.send_message(
-                chat_id=new_member.id,
-                text="Dis-moi ce que tu cherches, je te guide 👇",
-                reply_markup=menu_keyboard,
-            )
-
-            # 4) relance automatique après 24h
-            context.job_queue.run_once(
-                followup_job,
-                when=24 * 60 * 60,
-                context=new_member.id,
-                name=f"followup_{new_member.id}",
-            )
-
-        except Exception as e:
-            # Souvent : DM fermés aux bots → pas grave
-            logging.warning(f"Erreur envoi DM / menu / followup : {e}")
-
 
 def followup_job(context: CallbackContext) -> None:
-    """DM automatique 24h après l’arrivée."""
+    """DM automatique 24h après /start (donc autorisé)."""
     user_id = context.job.context
     keyboard = m2m_keyboard("followup")
     try:
@@ -208,18 +159,64 @@ def followup_job(context: CallbackContext) -> None:
 
 
 def start_or_help(update: Update, context: CallbackContext) -> None:
-    """Répond à /start et /help (surtout en privé)."""
+    """Répond à /start et /help en PRIVÉ (ou en groupe si quelqu’un le tape)."""
     chat = update.effective_chat
-    keyboard = m2m_keyboard("help")
+    user = update.effective_user
+    keyboard = m2m_keyboard("welcome_dm")
+
+    # 1) DM explicatif + CTA
+    try:
+        context.bot.send_message(
+            chat_id=chat.id,
+            text=WELCOME_DM,
+            reply_markup=keyboard,
+        )
+    except Exception as e:
+        logging.warning(f"Erreur envoi WELCOME_DM : {e}")
+
+    # 2) Menu interactif en DM
+    menu_keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "💘 Je cherche des rencontres",
+                    callback_data="menu_rencontres",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🤝 Je veux lier amitié",
+                    callback_data="menu_amitie",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "👀 Je découvre le groupe",
+                    callback_data="menu_decouverte",
+                )
+            ],
+        ]
+    )
 
     try:
         context.bot.send_message(
             chat_id=chat.id,
-            text=HELP_TEXT,
-            reply_markup=keyboard,
+            text="Dis-moi ce que tu cherches, je te guide 👇",
+            reply_markup=menu_keyboard,
         )
     except Exception as e:
-        logging.warning(f"Erreur envoi /start ou /help : {e}")
+        logging.warning(f"Erreur envoi menu DM /start : {e}")
+
+    # 3) relance automatique après 24h
+    try:
+        context.job_queue.run_once(
+            followup_job,
+            when=24 * 60 * 60,
+            context=chat.id,
+            name=f"followup_{user.id}",
+        )
+    except Exception as e:
+        logging.warning(f"Erreur programmation follow-up : {e}")
 
 
 def menu_callback(update: Update, context: CallbackContext) -> None:
@@ -298,7 +295,7 @@ def main() -> None:
     updater = Updater(TELEGRAM_TOKEN, use_context=True)
     dp = updater.dispatcher
 
-    # Nouveaux membres dans le groupe
+    # Nouveaux membres dans le groupe → message de bienvenue PUBLIC
     dp.add_handler(
         MessageHandler(Filters.status_update.new_chat_members, welcome_new_members)
     )
@@ -315,7 +312,7 @@ def main() -> None:
     # Boutons du menu en DM
     dp.add_handler(CallbackQueryHandler(menu_callback))
 
-    logging.info("Mad2Moi helper bot démarré (full options + bouton Facebook).")
+    logging.info("Mad2Moi helper bot démarré (DM via /start, full options).")
     updater.start_polling()
     updater.idle()
 
