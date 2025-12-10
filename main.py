@@ -13,6 +13,7 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
 )
+import openai
 
 # --- CONFIG / LOGS ---
 
@@ -21,8 +22,9 @@ logging.basicConfig(
     level=logging.INFO,
 )
 
-# 🔐 Token récupéré depuis Railway (variable TELEGRAM_TOKEN)
+# 🔐 Tokens / clés
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
+openai.api_key = os.environ["OPENAI_API_KEY"]
 
 # URL de base Mad2Moi
 M2M_BASE_URL = "https://www.mad2moi.com/"
@@ -33,12 +35,24 @@ FB_MAD2MOI_URL = "https://www.facebook.com/groups/1095227448813415/?ref=share"
 # Campagne UTM principale pour ce groupe
 M2M_CAMPAIGN = "non_vax_groupe"
 
+# Persona IA : coach Mad2Moi
+AI_SYSTEM_PROMPT = (
+    "Tu es une conseillère bienveillante pour la communauté Mad2Moi, un site de "
+    "rencontres et de liens entre personnes libres, éveillées, souvent non-vax. "
+    "Ta mission : écouter, rassurer, donner des conseils relationnels, émotionnels, "
+    "sociaux, et ORIENTER subtilement mais fermement vers l'inscription sur Mad2Moi.\n\n"
+    "Règles :\n"
+    "- Ton ton est chaleureux, direct, honnête, pas mielleux.\n"
+    "- Tu ne donnes PAS de conseils médicaux ni financiers.\n"
+    "- Tu restes soft : pas de porno, pas de détail sexuel cru.\n"
+    "- Tu rappelles régulièrement que Mad2Moi est l'endroit idéal pour rencontrer "
+    "des personnes qui partagent leurs valeurs.\n"
+    "- Tu termines la plupart de tes réponses par un call-to-action discret vers Mad2Moi, "
+    "avec cette phrase (ou variante proche) :\n"
+    "  'Si tu veux passer du virtuel au réel avec des gens comme toi, le mieux est de t'inscrire sur Mad2Moi : https://www.mad2moi.com/'\n"
+)
 
 def make_m2m_url(step: str = "") -> str:
-    """
-    Construit une URL Mad2Moi avec UTM pour tracker les inscriptions.
-    step = welcome_public / welcome_dm / followup / menu_rencontres / etc.
-    """
     url = (
         f"{M2M_BASE_URL}"
         f"?utm_source=telegram"
@@ -51,11 +65,6 @@ def make_m2m_url(step: str = "") -> str:
 
 
 def m2m_keyboard(step: str) -> InlineKeyboardMarkup:
-    """
-    Clavier avec :
-      - bouton Mad2Moi (UTM)
-      - bouton Groupe Facebook Mad2Moi
-    """
     btn_m2m = InlineKeyboardButton(
         "➡ Rejoindre Mad2Moi",
         url=make_m2m_url(step),
@@ -96,6 +105,7 @@ HELP_TEXT = (
     " • je t’explique comment fonctionne Mad2Moi\n"
     " • je t’envoie les bons liens\n"
     " • je te propose un menu (rencontres / amitié / découverte)\n\n"
+    "Tu peux aussi simplement m'écrire en privé : je te répondrai avec l'IA Mad2Moi.\n\n"
     "🔥 Pour découvrir la plateforme : clique sur le bouton ci-dessous."
 )
 
@@ -107,7 +117,6 @@ FOLLOWUP_TEXT = (
     "Tu peux t’inscrire ici, c’est rapide et sécurisé :"
 )
 
-# Mots-clés qui déclenchent une réponse automatique dans le groupe
 KEYWORDS_RENCONTRE = [
     "rencontrer",
     "rencontre",
@@ -120,21 +129,15 @@ KEYWORDS_RENCONTRE = [
 ]
 
 
-# --- HANDLERS ---
+# --- HANDLERS TELEGRAM ---
 
 
 def welcome_new_members(update: Update, context: CallbackContext) -> None:
-    """
-    Appelé automatiquement quand quelqu’un rejoint le groupe.
-    → On envoie UNIQUEMENT un message PUBLIC (Telegram interdit le DM auto
-      tant que l’utilisateur n’a pas parlé au bot en privé).
-    """
     message = update.message
     chat = message.chat
     keyboard_public = m2m_keyboard("welcome_public")
 
     for new_member in message.new_chat_members:
-        # On ignore les bots
         if new_member.is_bot:
             continue
 
@@ -149,7 +152,6 @@ def welcome_new_members(update: Update, context: CallbackContext) -> None:
 
 
 def followup_job(context: CallbackContext) -> None:
-    """DM automatique 24h après /start (autorisé car l’utilisateur a parlé au bot)."""
     user_id = context.job.context
     keyboard = m2m_keyboard("followup")
     try:
@@ -163,15 +165,10 @@ def followup_job(context: CallbackContext) -> None:
 
 
 def start_or_help(update: Update, context: CallbackContext) -> None:
-    """
-    Répond à /start et /help.
-    - En groupe : donne juste le lien vers le bot en privé
-    - En privé : envoie le vrai tunnel DM (WELCOME_DM + menu + relance 24h)
-    """
     chat = update.effective_chat
     user = update.effective_user
 
-    # 🔹 CAS 1 : commande tapée dans un GROUPE → on renvoie vers le PRIVÉ
+    # /start dans un groupe → on renvoie vers le privé
     if chat.type in ("group", "supergroup"):
         private_link = "https://t.me/mad2moi_helper_bot?start=go"
         try:
@@ -187,10 +184,9 @@ def start_or_help(update: Update, context: CallbackContext) -> None:
             logging.warning(f"Erreur envoi /start dans groupe : {e}")
         return
 
-    # 🔹 CAS 2 : commande tapée en PRIVÉ → vrai tunnel DM
+    # /start en PRIVÉ → tunnel DM
     keyboard = m2m_keyboard("welcome_dm")
 
-    # 1) DM explicatif + CTA
     try:
         context.bot.send_message(
             chat_id=chat.id,
@@ -200,7 +196,6 @@ def start_or_help(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         logging.warning(f"Erreur envoi WELCOME_DM : {e}")
 
-    # 2) Menu interactif en DM
     menu_keyboard = InlineKeyboardMarkup(
         [
             [
@@ -233,7 +228,6 @@ def start_or_help(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         logging.warning(f"Erreur envoi menu DM /start : {e}")
 
-    # 3) relance automatique après 24h (sur ce même DM)
     try:
         context.job_queue.run_once(
             followup_job,
@@ -246,7 +240,6 @@ def start_or_help(update: Update, context: CallbackContext) -> None:
 
 
 def menu_callback(update: Update, context: CallbackContext) -> None:
-    """Gère les clics sur le menu en DM (rencontres / amitié / découverte)."""
     query = update.callback_query
     data = query.data
     user_id = query.from_user.id
@@ -264,13 +257,13 @@ def menu_callback(update: Update, context: CallbackContext) -> None:
 
     elif data == "menu_amitie":
         txt = (
-            "🤝 Tu veux surtout élargir ton cercle d’amis éveillés, c’est top.\n\n"
+            "🤝 Tu veux surtout élargir ton cercle d'amis éveillés, c’est top.\n\n"
             "Mad2Moi permet aussi de créer des liens amicaux locaux ou à distance. "
             "Inscris-toi ici pour trouver des profils qui partagent ta vision :"
         )
         step = "menu_amitie"
 
-    else:  # menu_decouverte
+    else:
         txt = (
             "👀 Tu peux prendre le temps de découvrir…\n\n"
             "Quand tu seras prêt(e), crée ton profil sur Mad2Moi : "
@@ -290,14 +283,17 @@ def menu_callback(update: Update, context: CallbackContext) -> None:
 
 def keyword_auto_reply(update: Update, context: CallbackContext) -> None:
     """
-    Répond automatiquement dans le groupe quand quelqu’un parle de rencontres,
-    sans être agressif.
+    Répond automatiquement dans le GROUPE quand quelqu’un parle de rencontres.
+    (On ne le déclenche pas en privé.)
     """
     message = update.message
     user = message.from_user
-    text = (message.text or "").lower()
+    chat = message.chat
 
-    # On ignore les bots
+    if chat.type not in ("group", "supergroup"):
+        return
+
+    text = (message.text or "").lower()
     if user.is_bot:
         return
 
@@ -312,6 +308,50 @@ def keyword_auto_reply(update: Update, context: CallbackContext) -> None:
             message.reply_text(reply, reply_markup=keyboard)
         except Exception as e:
             logging.warning(f"Erreur envoi auto-reply : {e}")
+
+
+# --- IA OPENAI EN PRIVÉ ---
+
+
+def private_ai_chat(update: Update, context: CallbackContext) -> None:
+    """
+    Chat IA en PRIVÉ :
+    - si quelqu’un écrit en DM au bot (hors commandes), on envoie à OpenAI
+    - et on répond en gardant la logique de conversion Mad2Moi
+    """
+    message = update.message
+    chat = message.chat
+
+    # On ne gère ici que les DM privés, pas les groupes
+    if chat.type != "private":
+        return
+
+    user_text = (message.text or "").strip()
+    if not user_text:
+        return
+
+    try:
+        completion = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": AI_SYSTEM_PROMPT},
+                {"role": "user", "content": user_text},
+            ],
+            temperature=0.6,
+            max_tokens=400,
+        )
+        answer = completion.choices[0].message["content"].strip()
+    except Exception as e:
+        logging.error(f"Erreur appel OpenAI : {e}")
+        answer = (
+            "Je n'arrive pas à répondre avec l'IA pour le moment. "
+            "Mais tu peux déjà découvrir Mad2Moi ici : https://www.mad2moi.com/"
+        )
+
+    try:
+        message.reply_text(answer)
+    except Exception as e:
+        logging.warning(f"Erreur envoi réponse IA : {e}")
 
 
 # --- MAIN ---
@@ -338,7 +378,15 @@ def main() -> None:
     # Boutons du menu en DM
     dp.add_handler(CallbackQueryHandler(menu_callback))
 
-    logging.info("Mad2Moi helper bot démarré (DM via /start, full options + Facebook).")
+    # IA en privé (tous les messages texte privés hors commandes)
+    dp.add_handler(
+        MessageHandler(
+            Filters.text & ~Filters.command & Filters.chat_type.private,
+            private_ai_chat,
+        )
+    )
+
+    logging.info("Mad2Moi helper bot démarré (full options + IA OpenAI).")
     updater.start_polling()
     updater.idle()
 
