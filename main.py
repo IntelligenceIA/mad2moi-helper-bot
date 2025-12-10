@@ -18,14 +18,14 @@ import openai
 # --- CONFIG / LOGS ---
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(name)s - %(level)s - %(message)s",
     level=logging.INFO,
 )
 
 # 🔐 Tokens / clés
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 
-# OpenAI : on lit la clé de manière SÉCURISÉE (pas de crash)
+# OpenAI : on lit la clé de manière SÉCURISÉE (pas de crash si absente)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     logging.warning("OPENAI_API_KEY non défini — l’IA sera désactivée.")
@@ -421,7 +421,7 @@ def main() -> None:
     # IA en privé (tous les messages texte privés hors commandes)
     dp.add_handler(
         MessageHandler(
-            Filters.text & ~Filters.command & Filters.private,
+            Filters.text & ~Filters.command & Filters.chat_type.private,
             private_ai_chat,
         )
     )
