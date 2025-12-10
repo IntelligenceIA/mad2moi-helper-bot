@@ -14,7 +14,7 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
-# --- CONFIG / CONSTANTES ---
+# --- CONFIG / LOGS ---
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -36,7 +36,7 @@ M2M_CAMPAIGN = "non_vax_groupe"
 
 def make_m2m_url(step: str = "") -> str:
     """
-    Construit une URL Mad2Moi avec UTM pour tracker les inscriptions
+    Construit une URL Mad2Moi avec UTM pour tracker les inscriptions.
     step = welcome_public / welcome_dm / followup / menu_rencontres / etc.
     """
     url = (
@@ -53,8 +53,8 @@ def make_m2m_url(step: str = "") -> str:
 def m2m_keyboard(step: str) -> InlineKeyboardMarkup:
     """
     Clavier avec :
-    - bouton Mad2Moi (UTM)
-    - bouton Groupe Facebook Mad2Moi
+      - bouton Mad2Moi (UTM)
+      - bouton Groupe Facebook Mad2Moi
     """
     btn_m2m = InlineKeyboardButton(
         "➡ Rejoindre Mad2Moi",
@@ -95,14 +95,15 @@ HELP_TEXT = (
     "▶ Quand tu rejoins le groupe, tu peux me lancer en privé avec /start :\n"
     " • je t’explique comment fonctionne Mad2Moi\n"
     " • je t’envoie les bons liens\n"
-    " • je te propose un petit menu (rencontres / amitié / découverte)\n\n"
+    " • je te propose un menu (rencontres / amitié / découverte)\n\n"
     "🔥 Pour découvrir la plateforme : clique sur le bouton ci-dessous."
 )
 
 FOLLOWUP_TEXT = (
     "👋 Re-bonjour, c’est le bot Mad2Moi.\n\n"
     "Tu as eu le temps de découvrir la plateforme Mad2Moi ? "
-    "C’est là que les membres du groupe font de vraies rencontres (amicales, amoureuses, projets…).\n\n"
+    "C’est là que les membres du groupe font de vraies rencontres "
+    "(amicales, amoureuses, projets…).\n\n"
     "Tu peux t’inscrire ici, c’est rapide et sécurisé :"
 )
 
@@ -123,10 +124,13 @@ KEYWORDS_RENCONTRE = [
 
 
 def welcome_new_members(update: Update, context: CallbackContext) -> None:
-    """Appelé automatiquement quand quelqu’un rejoint le groupe → message PUBLIC uniquement."""
+    """
+    Appelé automatiquement quand quelqu’un rejoint le groupe.
+    → On envoie UNIQUEMENT un message PUBLIC (Telegram interdit le DM auto
+      tant que l’utilisateur n’a pas parlé au bot en privé).
+    """
     message = update.message
     chat = message.chat
-
     keyboard_public = m2m_keyboard("welcome_public")
 
     for new_member in message.new_chat_members:
@@ -145,7 +149,7 @@ def welcome_new_members(update: Update, context: CallbackContext) -> None:
 
 
 def followup_job(context: CallbackContext) -> None:
-    """DM automatique 24h après /start (donc autorisé)."""
+    """DM automatique 24h après /start (autorisé car l’utilisateur a parlé au bot)."""
     user_id = context.job.context
     keyboard = m2m_keyboard("followup")
     try:
@@ -159,9 +163,31 @@ def followup_job(context: CallbackContext) -> None:
 
 
 def start_or_help(update: Update, context: CallbackContext) -> None:
-    """Répond à /start et /help en PRIVÉ (ou en groupe si quelqu’un le tape)."""
+    """
+    Répond à /start et /help.
+    - En groupe : donne juste le lien vers le bot en privé
+    - En privé : envoie le vrai tunnel DM (WELCOME_DM + menu + relance 24h)
+    """
     chat = update.effective_chat
     user = update.effective_user
+
+    # 🔹 CAS 1 : commande tapée dans un GROUPE → on renvoie vers le PRIVÉ
+    if chat.type in ("group", "supergroup"):
+        private_link = "https://t.me/mad2moi_helper_bot?start=go"
+        try:
+            context.bot.send_message(
+                chat_id=chat.id,
+                text=(
+                    "📩 Pour discuter avec moi en privé et recevoir tous les liens "
+                    "Mad2Moi, clique ici :\n"
+                    f"{private_link}"
+                ),
+            )
+        except Exception as e:
+            logging.warning(f"Erreur envoi /start dans groupe : {e}")
+        return
+
+    # 🔹 CAS 2 : commande tapée en PRIVÉ → vrai tunnel DM
     keyboard = m2m_keyboard("welcome_dm")
 
     # 1) DM explicatif + CTA
@@ -207,7 +233,7 @@ def start_or_help(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         logging.warning(f"Erreur envoi menu DM /start : {e}")
 
-    # 3) relance automatique après 24h
+    # 3) relance automatique après 24h (sur ce même DM)
     try:
         context.job_queue.run_once(
             followup_job,
@@ -220,7 +246,7 @@ def start_or_help(update: Update, context: CallbackContext) -> None:
 
 
 def menu_callback(update: Update, context: CallbackContext) -> None:
-    """Gère les clics sur le menu en DM."""
+    """Gère les clics sur le menu en DM (rencontres / amitié / découverte)."""
     query = update.callback_query
     data = query.data
     user_id = query.from_user.id
@@ -295,7 +321,7 @@ def main() -> None:
     updater = Updater(TELEGRAM_TOKEN, use_context=True)
     dp = updater.dispatcher
 
-    # Nouveaux membres dans le groupe → message de bienvenue PUBLIC
+    # Nouveaux membres / message de bienvenue PUBLIC
     dp.add_handler(
         MessageHandler(Filters.status_update.new_chat_members, welcome_new_members)
     )
@@ -312,7 +338,7 @@ def main() -> None:
     # Boutons du menu en DM
     dp.add_handler(CallbackQueryHandler(menu_callback))
 
-    logging.info("Mad2Moi helper bot démarré (DM via /start, full options).")
+    logging.info("Mad2Moi helper bot démarré (DM via /start, full options + Facebook).")
     updater.start_polling()
     updater.idle()
 
